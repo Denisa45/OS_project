@@ -33,41 +33,62 @@ int get_next_treasure_id(const char* hunt_id);
 int does_hunt_exist(const char* hunt_id);
 int create_hunt_directory(const char* hunt_id);
 
-int main(int argc, char* argv[]) {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s command hunt_id [treasure_id]\n", argv[0]);
-        fprintf(stderr, "Commands: add, list, view, remove_treasure, remove_hunt\n");
-        return 1;
-    }
+int main() {
+    char hunt_id[MAX_PATH];
+    int choice;
+    int treasure_id;
 
-    const char* command = argv[1];
-    const char* hunt_id = argv[2];
+    printf("Enter hunt ID: ");
+    scanf("%255s", hunt_id);
 
-    if (strcmp(command, "add") == 0) {
-        add_treasure(hunt_id);
-    } else if (strcmp(command, "list") == 0) {
-        list_treasures(hunt_id);
-    } else if (strcmp(command, "view") == 0) {
-        if (argc < 4) {
-            fprintf(stderr, "Error: treasure_id required for view command\n");
-            return 1;
+    while (1) {
+        printf("\n--- Treasure Hunt Menu ---\n");
+        printf("1. Add treasure\n");
+        printf("2. List treasures\n");
+        printf("3. View treasure\n");
+        printf("4. Remove treasure\n");
+        printf("5. Remove hunt\n");
+        printf("6. Exit\n");
+        printf("Enter your choice: ");
+        scanf("%d", &choice);
+
+        switch (choice) {
+            case 1:
+                add_treasure(hunt_id);
+                break;
+            case 2:
+                list_treasures(hunt_id);
+                break;
+            case 3:
+                printf("Enter treasure ID to view: ");
+                scanf("%d", &treasure_id);
+                view_treasure(hunt_id, treasure_id);
+                break;
+            case 4:
+                printf("Enter treasure ID to remove: ");
+                scanf("%d", &treasure_id);
+                remove_treasure(hunt_id, treasure_id);
+                break;
+            case 5:
+                remove_hunt(hunt_id);
+                // After removing hunt, maybe ask for new hunt ID or exit
+                printf("Enter new hunt ID or 'exit' to quit: ");
+                scanf("%255s", hunt_id);
+                if (strcmp(hunt_id, "exit") == 0) {
+                    return 0;
+                }
+                break;
+            case 6:
+                printf("Exiting...\n");
+                return 0;
+            default:
+                printf("Invalid choice, try again.\n");
         }
-        view_treasure(hunt_id, atoi(argv[3]));
-    } else if (strcmp(command, "remove_treasure") == 0) {
-        if (argc < 4) {
-            fprintf(stderr, "Error: treasure_id required for remove_treasure command\n");
-            return 1;
-        }
-        remove_treasure(hunt_id, atoi(argv[3]));
-    } else if (strcmp(command, "remove_hunt") == 0) {
-        remove_hunt(hunt_id);
-    } else {
-        fprintf(stderr, "Unknown command: %s\n", command);
-        return 1;
     }
 
     return 0;
 }
+
 
 int does_hunt_exist(const char* hunt_id) {
     char path[MAX_PATH];
@@ -248,7 +269,7 @@ void create_symlink(const char* hunt_id) {
     snprintf(target_path, MAX_PATH, "%s/%s", hunt_id, LOG_FILENAME);
     snprintf(link_path, MAX_PATH, "logged_hunt-%s", hunt_id);
 
-    unlink(link_path);
+    unlink(link_path);//Deletes any existing symbolic link or file with the same name (logged_hunt-game1) to avoid failure when creating the new one.
 
     if (symlink(target_path, link_path) != 0) {
         perror("Failed to create symbolic link");

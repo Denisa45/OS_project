@@ -45,6 +45,8 @@ int count_treasures(const char* hunt_id);
 int does_hunt_exist(const char* hunt_id);
 
 
+void run_menu();
+
 int main() {
     struct sigaction sa;
 
@@ -55,9 +57,21 @@ int main() {
     sigaction(SIGUSR1, &sa, NULL);
     sigaction(SIGUSR2, &sa, NULL);
 
+    run_menu();
+
+    return 0;
+}
+
+void run_menu() {
     printf("Treasure Hub - Interactive Interface\n");
     printf("------------------------------------\n");
-    printf("Available commands: start_monitor, list_hunts, list_treasures <hunt_id>, view_treasure <hunt_id> <treasure_id>, stop_monitor, exit\n");
+    printf("Available commands:\n");
+    printf("  start_monitor\n");
+    printf("  list_hunts\n");
+    printf("  list_treasures <hunt_id>\n");
+    printf("  view_treasure <hunt_id> <treasure_id>\n");
+    printf("  stop_monitor\n");
+    printf("  exit\n");
 
     char command[MAX_COMMAND];
 
@@ -68,16 +82,15 @@ int main() {
         }
 
         command[strcspn(command, "\n")] = '\0';
-
         process_command(command);
     }
-
-    return 0;
 }
 
 void parent_signal_handler(int signum) {
+    //If SIGUSR1 → the monitor has completed a task 
     if (signum == SIGUSR1) {
         printf("Task done!\n");
+    //If SIGUSR2 → the monitor has terminated
     } else if (signum == SIGUSR2) {
         monitor_running = 0;
     }
@@ -161,10 +174,12 @@ void start_monitor() {
     if (pid < 0) {
         perror("fork");
         exit(1);
+        // child makes the work in the monitor_process function
     } else if (pid == 0) {
         monitor_process();
         exit(0);
     } else {
+        // parent process Waits for user input, sends signals to monitor
         monitor_pid = pid;
         monitor_running = 1;
         printf("Monitor started with PID: %d\n", monitor_pid);
@@ -195,42 +210,47 @@ void stop_monitor() {
     monitor_running = 0;
     monitor_pid = -1;
 }
-
+// perform a task based on the signal received
 void monitor_process() {
     struct sigaction sa;
 
     sa.sa_handler = monitor_signal_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-
+    //When signal SIGUSR1 occurs, run monitor_signal_handler with the specified mask and flags.
     sigaction(SIGUSR1, &sa, NULL);
     sigaction(SIGUSR2, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
+    //Send SIGUSR1 to the parent process to indicate that the monitor is ready.
     kill(getppid(), SIGUSR1);
 
     char hunt_id[MAX_PATH];
     int treasure_id;
 
     while (!exit_requested) {
+        //Wait for a signal to be received
         pause();
 
         if (received_signal == SIGUSR1) {
             list_all_hunts();
             kill(getppid(), SIGUSR1);
         } else if (received_signal == SIGUSR2) {
+            
             FILE* tmp = fopen("temp_command.txt", "r");
             if (tmp) {
                 if (fscanf(tmp, "%255s", hunt_id) == 1) {
                     fclose(tmp);
+                    //
                     list_hunt_treasures(hunt_id);
                 } else {
                     fclose(tmp);
                     printf("Error reading hunt ID from temporary file\n");
                 }
             }
-            kill(getppid(), SIGUSR1);
+            //
+            kill(getppid(), SIGUSR1);//The child tells the parent, "I finished processing your request (signal)."
         } else if (received_signal == SIGINT) {
             FILE* tmp = fopen("temp_command.txt", "r");
             if (tmp) {
@@ -255,7 +275,7 @@ void monitor_process() {
     kill(getppid(), SIGUSR2);
     exit(0);
 }
-
+//Record which signal it received
 void monitor_signal_handler(int signum) {
     received_signal = signum;
 }
@@ -266,7 +286,7 @@ void list_all_hunts() {
     struct stat st;
     char path[MAX_PATH * 2];
 
-    dir = opendir(".");
+    dir = opendir(".");// Open the current directory
     if (dir == NULL) {
         perror("opendir");
         return;
@@ -276,25 +296,33 @@ void list_all_hunts() {
     printf("---------------\n");
     int hunt_count = 0;
 
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
+   while ((entry = readdir(dir)) != NULL) { // Read each entry in the directory
+    // Skip the current and parent directory entries
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+        continue;
+    }
 
-        if (stat(entry->d_name, &st) == 0 && S_ISDIR(st.st_mode)) {
-            if (strlen(entry->d_name) + 14 < MAX_PATH) {
-                snprintf(path, MAX_PATH * 2, "%s/treasures.dat", entry->d_name);
+    // Check if the entry is a directory
+    if (stat(entry->d_name, &st) == 0 && S_ISDIR(st.st_mode)) {
+        
+        // Check if the combined path length will fit in MAX_PATH buffer
+        if (strlen(entry->d_name) + 14 < MAX_PATH) {
+            // Construct a path like "<dirname>/treasures.dat"
+            snprintf(path, MAX_PATH * 2, "%s/treasures.dat", entry->d_name);
 
-                if (access(path, F_OK) != -1) {
-                    int count = count_treasures(entry->d_name);
-                    printf("Hunt: %s - Total treasures: %d\n", entry->d_name, count);
-                    hunt_count++;
-                }
-            } else {
-                printf("Hunt name too long: %s\n", entry->d_name);
+            // Check if the file "treasures.dat" exists in that directory
+            if (access(path, F_OK) != -1) {
+                // Count treasures in this hunt directory
+                int count = count_treasures(entry->d_name);
+                printf("Hunt: %s - Total treasures: %d\n", entry->d_name, count);
+                hunt_count++;
             }
+        } else {
+            printf("Hunt name too long: %s\n", entry->d_name);
         }
     }
+}
+
 
     if (hunt_count == 0) {
         printf("No hunts found.\n");
